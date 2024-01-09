@@ -1,18 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-
-// TODO
-// 1. test payable
-// 2. add events
-// 3. add require
-// 4. add error
-// 5. add tests
-
 contract DiscreteGDA {
+    // Storage
     uint256 public next_auction_id;
     mapping (uint256 => DGDA) public auctions;
 
+    // Struct
     struct DGDA {
         address seller;
         uint256 sold;
@@ -31,6 +25,12 @@ contract DiscreteGDA {
         uint token_id;
     }
 
+    // Event
+    event AuctionCreated(address seller, uint256 auctionId, uint256 k, uint256 alpha, uint256 numberOfTokens, uint256 lambda, Token[] tokens);
+    event AuctionDeleted(uint256 auctionId, DGDA auction);
+    event BulkBuyTokens(address buyer, uint256 auctionId, uint256 amount, uint256 price, Token[] tokens);
+
+    // Method
     constructor() {
         next_auction_id = 0;
     }
@@ -48,6 +48,8 @@ contract DiscreteGDA {
         auction.p_n = n;
         auction.p_lambda = lambda;
 
+
+        emit AuctionCreated(msg.sender, next_auction_id, k, alpha, n, lambda, auction.tokens);
         next_auction_id++;
     }
 
@@ -56,13 +58,25 @@ contract DiscreteGDA {
     }
 
     function deleteAuction(uint256 id) public {
+        DGDA memory auction = auctions[id];
         delete auctions[id];
+        emit AuctionDeleted(id, auction);
     }
 
     function bulkBuy(uint256 id, uint256 amount) payable public {
         uint256 price = _bulkBuyPrice(id, amount);
-        DGDA memory auction = auctions[id];
-        bool success = payable(auction.seller).send(msg.value);
+        DGDA storage auction = auctions[id];
+        // bool success = payable(auction.seller).send(msg.value);
+
+        Token[] memory tokens = new Token[](amount);
+        for(uint i=auction.sold; i<auction.sold + amount; i++) {
+            tokens[i - auction.sold] = auction.tokens[i];
+        }
+
+        // update storage
+        auction.sold = auction.sold + amount;
+
+        emit BulkBuyTokens(msg.sender, id, amount, price, tokens);
     }
 
     function _bulkBuyPrice(uint256 id, uint256 amount) public view returns (uint256) {

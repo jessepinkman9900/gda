@@ -14,7 +14,6 @@ contract DiscreteGDA {
         // price function params
         uint256 p_k;
         uint256 p_alpha;
-        uint256 p_n;
         uint256 p_lambda;
         // tokens to sell
         Token[] tokens;
@@ -24,6 +23,7 @@ contract DiscreteGDA {
         address contract_address;
         uint token_id;
     }
+
 
     // Event
     event AuctionCreated(address seller, uint256 auctionId, uint256 k, uint256 alpha, uint256 numberOfTokens, uint256 lambda, Token[] tokens);
@@ -35,7 +35,12 @@ contract DiscreteGDA {
         next_auction_id = 0;
     }
 
-    function createAuction(uint256 k, uint256 alpha, uint256 n, uint256 lambda, Token[] memory _tokens) public {
+    function createAuction(uint256 k, uint256 alpha, uint256 lambda, Token[] memory _tokens) public {
+        require(k > 0, "Starting price k must be greater than 0");
+        require(alpha > 0, "Price scaling factor must be greater than 0");
+        require(lambda > 0, "Price function decay factor must be greater than 0");
+        require(_tokens.length > 0, "List of tokens to be sold must be non-empty");
+
         DGDA storage auction = auctions[next_auction_id];
         auction.seller = msg.sender;
         auction.startBlock = block.number;
@@ -45,11 +50,10 @@ contract DiscreteGDA {
         }
         auction.p_k = k;
         auction.p_alpha = alpha;
-        auction.p_n = n;
         auction.p_lambda = lambda;
 
 
-        emit AuctionCreated(msg.sender, next_auction_id, k, alpha, n, lambda, auction.tokens);
+        emit AuctionCreated(msg.sender, next_auction_id, k, alpha, auction.tokens.length, lambda, auction.tokens);
         next_auction_id++;
     }
 
@@ -58,14 +62,20 @@ contract DiscreteGDA {
     }
 
     function deleteAuction(uint256 id) public {
+        require(id < next_auction_id, "Invalid auction id");
         DGDA memory auction = auctions[id];
         delete auctions[id];
         emit AuctionDeleted(id, auction);
     }
 
     function bulkBuy(uint256 id, uint256 amount) payable public {
-        uint256 price = _bulkBuyPrice(id, amount);
+        require(id < next_auction_id, "Invalid auction id");
         DGDA storage auction = auctions[id];
+
+        uint256 price = _bulkBuyPrice(id, amount);
+
+        require(msg.value >= price, "Insufficient funds provided for the sale");
+        require(amount <= (auction.tokens.length - auction.sold), "Amount is greater than the remaining amount of tokens to be sold");
         // bool success = payable(auction.seller).send(msg.value);
 
         Token[] memory tokens = new Token[](amount);
